@@ -1,0 +1,38 @@
+{
+  "LIME": {
+    "num_features": 60,
+    "num_sample": 1000,
+    "top_label": 1,
+    "index": 0
+  },
+  "RISE": {
+    "num_sample": 500,
+    "grid_size": 8,
+    "prob": 0.5,
+    "index": 0
+  },
+  "CAM": {
+    "first_stage": {
+      "output": "concat_1",
+      "target": "Conv/Relu6",
+      "NMS": "BatchMultiClassNonMaxSuppression/map/while/MultiClassNonMaxSuppression/non_max_suppression/NonMaxSuppressionV3"
+    },
+    "second_stage": {
+      "output": "SecondStagePostprocessor/scale_logits",
+      "target": "SecondStageFeatureExtractor/InceptionResnetV2/Conv2d_7b_1x1/Relu",
+      "index": 0 ,
+      "NMS": "SecondStagePostprocessor/BatchMultiClassNonMaxSuppression/map/while/MultiClassNonMaxSuppression/non_max_suppression/NonMaxSuppressionV3" 
+    }
+  },
+  "Gradient": {
+    "output": "concat_1",
+    "target": "Preprocessor/sub"
+  },
+  "Model": {
+    "file_config": "model/config/model_config.json",
+    "folder_xml": "data/test_annotation/",
+    "threshold": 0.5, 
+    "box_prediction_true": "blue_color",
+    "box_prediction_false": "red_color"
+  }
+}

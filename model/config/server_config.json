@@ -1,0 +1,9 @@
+{
+   "rmq_server":"172.27.169.162",
+   "rmq_port":5672,
+   "rmq_user":"tienbt",
+   "rmq_password":"admin123",
+   "rmq_virtual_host":"/",
+   "rmq_source_queue":"queue.model.input",
+   "rmq_completed_exchange":"DataClasses.Messages:FrameCompleted"
+}

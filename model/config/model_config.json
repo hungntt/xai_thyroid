@@ -1,0 +1,7 @@
+[
+   {
+      "model_name":"frcnn_inception_v2",
+      "model_id":"model1",
+      "model_path":"model/src/frozen_inference_graph.pb"
+   }
+]

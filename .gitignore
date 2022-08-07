@@ -1,0 +1,5 @@
+/data/samples/
+/data/test_annotation/
+/data/test_images/
+/model/src/frozen_inference_graph.pb
+.idea

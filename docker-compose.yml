@@ -1,0 +1,52 @@
+version: '3.7'
+
+volumes:
+    explainer_logs:
+      name: explainer_logs
+      external: false
+
+services:
+  explainer_tensorboard:
+    container_name: explainer_tensorboard
+    image: explainer_tensorboard:latest
+    build:
+      context: ./tensorboard/
+      dockerfile: ./Dockerfile
+    ports:
+      - 6006:6006
+    volumes:
+      - explainer_logs:/tmp/explainer_logs
+    command: ["run", "//explainer_tensorboard", "--", "--logdir=/tmp/explainer_logs"]
+    depends_on:
+      - explainer_model-backend
+      - explainer_assets-server
+
+  explainer_model-backend:
+    container_name: explainer_model-backend
+    image: explainer_model-backend:latest
+    build:
+      context: ./model-backend/
+      dockerfile: ./Dockerfile
+    ports:
+      - 5000:5000
+    command: ["python", "run.py"]
+
+  explainer_assets-server:
+    container_name: explainer_assets-server
+    image: explainer_assets-server:latest
+    build:
+      context: ./assets-server/
+      dockerfile: ./Dockerfile
+    ports:
+      - 8000:8000
+    command: ["python", "-u", "app.py", "/serve"]
+
+  explainer_summary:
+    container_name: explainer_summary
+    image: explainer_summary:latest
+    build:
+      context: ./tensorboard/
+      dockerfile: ./Dockerfile
+    volumes:
+      - explainer_logs:/tmp/explainer_logs
+    command: ["run", "//explainer_plugin:explainer_demo"]
