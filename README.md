@@ -19,25 +19,25 @@ python main.py --help
 - **GradCAM**
 
 ``` 
-python main.py --config_file xAI_config.json --method GradCAM --image_path data/test_images/ --output results/
+python main.py --config-file xAI_config.json --method GradCAM --image_path data/test_images/ --output results/
 ```
 
 In second stage:
 
 ```
-python main.py --config_file xAI_config.json --method GradCAM --image_path data/test_images/ --stage second_stage --output results/
+python main.py --config-file xAI_config.json --method GradCAM --image_path data/test_images/ --stage second_stage --output results/
 ```
 
 - **GradCAM++**
 
 ```
-python main.py --config_file xAI_config.json --method GradCAM++ --image_path data/test_images/ --output results/
+python main.py --config-file xAI_config.json --method GradCAM++ --image_path data/test_images/ --output results/
 ```
 
 In second stage:
 
 ```
-python main.py --config_file xAI_config.json --method GradCAM++ --image_path data/test_images/ --stage second_stage --output results/
+python main.py --config-file xAI_config.json --method GradCAM++ --image_path data/test_images/ --stage second_stage --output results/
 
 ```
 
@@ -50,20 +50,20 @@ python main.py --config_file xAI_config.json --method GradCAM++ --image_path dat
 + intgrad
 
 ```
-python main.py --config_file xAI_config.json --method elrp --image_path data/test_images/ --output results/
-python main.py --config_file xAI_config.json --method saliency --image_path data/test_images/ --output results/
+python main.py --config-file xAI_config.json --method eLRP --image_path data/test_images/ --output results/
+python main.py --config-file xAI_config.json --method saliency --image_path data/test_images/ --output results/
 ```
 
 - **RISE**
 
 ```
-python main.py --config_file xAI_config.json --method RISE --image_path data/test_images/ --stage second_stage --output results/
+python main.py --config-file xAI_config.json --method RISE --image_path data/test_images/ --stage second_stage --output results/
 ```
 
 - **LIME**
 
 ```
-python main.py --config_file xAI_config.json --method LIME --image_path data/test_images/ --stage second_stage --output results/ 
+python main.py --config-file xAI_config.json --method LIME --image_path data/test_images/ --stage second_stage --output results/ 
 ```
 
 **Note:** To change input, change the path to new data and path to xml file in xAI_config.json

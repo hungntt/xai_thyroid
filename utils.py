@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import argparse
 import json
 import logging
 import os
@@ -653,7 +654,7 @@ attribution_methods = OrderedDict({
     'saliency': (Saliency, 1),
     'grad*input': (GradientXInput, 2),
     'intgrad': (IntegratedGradients, 3),
-    'elrp': (EpsilonLRP, 4),
+    'eLRP': (EpsilonLRP, 4),
     'deeplift': (DeepLIFTRescale, 5),
     'occlusion': (Occlusion, 6),
     'shapley_sampling': (ShapleySampling, 7)
@@ -751,29 +752,56 @@ def get_info(path):
     return gr_truth
 
 
-def bb_intersection_over_union(boxA, boxB):
+def bbox_iou(boxA, boxB, x1y1x2y2=False):
     """
-    Calculate the intersection over union of two bounding boxes
+    Compute the intersection over union by taking the intersection area and dividing it by the sum of prediction +
+    ground-truth areas - the interesection area
     :param boxA: array of shape [4*1] = [x1,y1,x2,y2]
     :param boxB: array of shape [4*1] = [x1,y1,x2,y2]
+    :param x1y1x2y2: if True, interpret box coordinates as [x1,y1,w,h]
     :return: IoU
     """
-    xA = max(boxA[0], boxB[0])
-    yA = max(boxA[1], boxB[1])
-    xB = min(boxA[2], boxB[2])
-    yB = min(boxA[3], boxB[3])
-    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
-    boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
-    boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
-    iou = interArea / float(boxAArea + boxBArea - interArea)
-    return iou
+    if x1y1x2y2:
+        my = min(boxA[0], boxB[0])
+        My = max(boxA[2], boxB[2])
+        mx = min(boxA[1], boxB[1])
+        Mx = max(boxA[3], boxB[3])
+        h1 = boxA[2] - boxA[0]
+        w1 = boxA[3] - boxA[1]
+        h2 = boxB[2] - boxB[0]
+        w2 = boxB[3] - boxB[1]
+        uw = Mx - mx
+        uh = My - my
+        cw = w1 + w2 - uw
+        ch = h1 + h2 - uh
+
+        if cw <= 0 or ch <= 0:
+            return 0.0
+
+        area1 = w1 * h1
+        area2 = w2 * h2
+        carea = cw * ch
+        uarea = area1 + area2 - carea
+        return carea / uarea
+    else:
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+        interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+        boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+        boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+        iou = interArea / float(boxAArea + boxBArea - interArea)
+        return iou
 
 
-def gen_cam(image, mask, boxs=None):
+def gen_cam(image, mask, gr_truth_boxes, threshold, boxs=None):
     """
     Generate CAM map
     :param image: [H,W,C],the original image
     :param mask: [H,W], range 0~1
+    :param gr_truth_boxes: ground-truth bounding boxes
+    :param threshold: threshold to filter the bounding boxes
     :param boxs: [N,4], the bounding boxes
     :return: tuple(cam,heatmap)
     """
@@ -784,7 +812,7 @@ def gen_cam(image, mask, boxs=None):
     # heatmap = heatmap[..., ::-1]  # gbr to rgb
     image_cam = cv2.addWeighted(heatmap, 0.5, image, 0.5, 0)
 
-    image_cam = draw(image_cam, boxs)
+    image_cam = draw(image_cam, boxs, threshold, gr_truth_boxes)
 
     # heatmap = np.float32(heatmap) / 255
     heatmap = heatmap[..., ::-1]
@@ -793,25 +821,34 @@ def gen_cam(image, mask, boxs=None):
     return image_cam, heatmap
 
 
-def draw(image, boxs, gr_truth_boxes, threshold):
+def draw(image, boxs, threshold=None, gr_truth_boxes=None, color=(0, 255, 0), thickness=2):
     """
     Draw bounding boxes on image
     :param image: [H,W,C],the original image
     :param boxs: [N,4], the bounding boxes
-    :param gr_truth_boxes: [N,4], the ground-truth bounding boxes
     :param threshold: the threshold to filter the bounding boxes
+    :param gr_truth_boxes: [N,4], the ground-truth bounding boxes
+    :param color: the color of the bounding boxes
+    :param thickness: the thickness of the bounding boxes
     :return: image with bounding boxes
     """
     img_draw = image
-    for a in boxs:
-        iou = []
-        for b in gr_truth_boxes:
-            iou.append(bb_intersection_over_union(a, b))
-            test_iou = any(l > threshold for l in iou)
-            if test_iou:
-                img_draw = cv2.rectangle(image, (a[0], a[1]), (a[2], a[3]), color=(255, 0, 0), thickness=2)
-            else:
-                img_draw = cv2.rectangle(image, (a[0], a[1]), (a[2], a[3]), color=(0, 0, 255), thickness=2)
+    if gr_truth_boxes is not None:
+        for a in boxs:
+            iou = []
+            for b in gr_truth_boxes:
+                iou.append(bbox_iou(a, b))
+                test_iou = any(l > threshold for l in iou)
+                if test_iou:
+                    color = (255, 0, 0)
+                    img_draw = cv2.rectangle(image, (a[0], a[1]), (a[2], a[3]), color, thickness)
+                else:
+                    color = (0, 0, 255)
+                    img_draw = cv2.rectangle(image, (a[0], a[1]), (a[2], a[3]), color, thickness)
+    else:
+        for b in boxs:
+            start_point, end_point = (b[0], b[1]), (b[2], b[3])
+            image = cv2.rectangle(image, start_point, end_point, color, thickness)
     return img_draw
 
 
@@ -841,11 +878,10 @@ def get_config(path_config):
 
 def get_model(model_path):
     """
-    Get model from .pb file
-    :param model_path: Path to .pb model file
+    Get model from file
+    :param model_path: Path to model file
     :return: model
     """
-    global graph
     graph = tf.Graph()
     with graph.as_default():
         with tf.gfile.GFile(model_path, 'rb') as file:
@@ -860,3 +896,55 @@ def get_model(model_path):
 
             sess = tf.Session(graph=graph)
         return sess, img_input, detection_boxes, detection_scores, num_detections, detection_classes
+
+
+def get_tensor_mini(sess, layer_name, image, img_input):
+    """
+    Get tensor from mini model
+    :param sess: Session
+    :param layer_name: Name of layer
+    :param image: Image
+    :param img_input: Input tensor
+    :return: tensor units
+    """
+    print(layer_name)
+    layer = sess.graph.get_tensor_by_name(layer_name + ':0')
+    units = sess.run(layer, feed_dict={img_input: image})
+    return units
+
+
+def get_center(box):
+    center_box_x = np.zeros(len(box))
+    center_box_y = np.zeros(len(box))
+    for i in range(len(box)):
+        center_box_x[i] = int((box[i][2] + box[i][0]) / 2)
+        center_box_y[i] = int((box[i][3] + box[i][1]) / 2)
+    return center_box_x, center_box_y
+
+
+def softmax(x):
+    f = np.exp(x) / np.sum(np.exp(x), axis=1, keepdims=True)
+    return f
+
+
+def get_parser():
+    """
+    Parse command line arguments
+    :return: parser
+    """
+    parser = argparse.ArgumentParser(description='xAI for thyroid cancer detection')
+    parser.add_argument(
+            '--config-file',
+            default='model/config/model_config.json',
+            metavar='FILE',
+            help='path to config file',
+    )
+    parser.add_argument('--method',
+                        help='Choose Backpropagation methods: eLRP, GradCAM, GradCAM++, RISE, LIME, DRISE, KDE, '
+                             'DensityMap, AdaSISE')
+    parser.add_argument('--image-path', help='path to input images', default='data/test_images')
+    parser.add_argument('--stage', default='first_stage',
+                        help='Choose a stage to visualize: first_stage or second_stage')
+    parser.add_argument('--threshold', default=0.6, type=float, help='Threshold of output values to visualize')
+    parser.add_argument('--output', help='A file or directory to save output visualizations.')
+    return parser
