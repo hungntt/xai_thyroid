@@ -21,11 +21,10 @@ warnings.filterwarnings('ignore')
 start = datetime.now()
 
 
-def main():
+def main(args):
     # ---------------------------------Parameters-------------------------------------
     img_rs, output_tensor, last_conv_tensor, grads, num_sample, NMS = None, None, None, None, None, None
-    args = get_parser()
-    config_xAI = get_config(args.config_file)
+    config_xAI = get_config(args.config_path)
     config_models = get_config(config_xAI['Model']['file_config'])
     image_dict = {}
     sess, img_input, detection_boxes, detection_scores, num_detections, detection_classes = get_model(
@@ -67,7 +66,7 @@ def main():
                 baseline = np.zeros_like(image_rs)
                 gradient = GradientMethod(sess, img_rs, output_tensor, explainer, baseline)
                 image_dict[args.method] = gradient(image, args.method, img_input)
-                save_image(image_dict, os.path.basename(j), args.output, index='full_image')
+                save_image(image_dict, os.path.basename(j), args.output_path, index='full_image')
 
             elif args.method in ['GradCAM', 'GradCAM++']:
                 y_p_boxes, y_p_num_detections = sess.run([detection_boxes, num_detections],
@@ -83,13 +82,13 @@ def main():
                     mask = gradcam(image, grads, img_input, args.stage, y_p_boxes)
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img, mask, gr_truth_boxes, threshold, boxs)
-                    save_image(image_dict, os.path.basename(j), args.output, index='gradcam_first_stage_full_image')
+                    save_image(image_dict, os.path.basename(j), args.output_path, index='gradcam_first_stage_full_image')
                 else:
                     grad_cam_plus_plus = GradCAMPlusPlus(sess, last_conv_tensor, output_tensor)
                     mask_plus_plus = grad_cam_plus_plus(image, grads, img_input, args.stage, y_p_boxes)  # cam mask
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img, mask_plus_plus, gr_truth_boxes, threshold, boxs)
-                    save_image(image_dict, os.path.basename(j), args.output,
+                    save_image(image_dict, os.path.basename(j), args.output_path,
                                index='gradcam_plus_first_stage_full_image')
         # Second stage of model: Detect final boxes containing the nodule(s)
         else:
@@ -115,7 +114,7 @@ def main():
                 rs = rise.explain(image, index, img_input, detection_boxes, detection_scores, num_detections,
                                   detection_classes)[0]
                 image_dict[args.method], _ = gen_cam(img, rs, gr_truth_boxes, threshold, boxs)
-                save_image(image_dict, os.path.basename(j), args.output, index=f'rise_box{index}')
+                save_image(image_dict, os.path.basename(j), args.output_path, index=f'rise_box{index}')
 
             elif args.method in ['LIME']:
                 index = config_xAI['LIME']['index']
@@ -123,7 +122,7 @@ def main():
                 feature_view = 1
                 lime = LIME(sess, image=img, indices=index, num_features=num_features)
                 image_dict[args.method] = lime.explain(feature_view, num_samples=num_sample)
-                save_image(image_dict, os.path.basename(j), args.output, index=f'rise_box{index}')
+                save_image(image_dict, os.path.basename(j), args.output_path, index=f'rise_box{index}')
 
             elif args.method in ['GradCAM', 'GradCAM++']:
                 index = config_xAI['CAM'][args.stage]['index']
@@ -145,7 +144,7 @@ def main():
                     # Save image and heatmap
                     image_dict['predict_box'] = img[y1:y2, x1:x2]  # [H, W, C]
                     image_dict[args.method], _ = gen_cam(img[y1:y2, x1:x2], mask, gr_truth_boxes, threshold)
-                    save_image(image_dict, os.path.basename(j), args.output, index=f'gradcam_2th_stage_box{index}')
+                    save_image(image_dict, os.path.basename(j), args.output_path, index=f'gradcam_2th_stage_box{index}')
                 else:
                     # Run GradCAM++ and save results
                     grad_cam_plus_plus = GradCAMPlusPlus(sess, last_conv_tensor, output_tensor)
@@ -158,7 +157,7 @@ def main():
                                                                         y_p_boxes=y_p_boxes)  # cam mask
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img[y1:y2, x1:x2], mask_plus_plus, gr_truth_boxes, threshold)
-                    save_image(image_dict, os.path.basename(j), args.output, index=f'gradcam_plus_2th_stage_box{index}')
+                    save_image(image_dict, os.path.basename(j), args.output_path, index=f'gradcam_plus_2th_stage_box{index}')
             elif args.method == 'AdaSISE':
                 adasise = AdaSISE(image=image, sess=sess)
                 image_cam = adasise.explain(image, img_input)
@@ -182,7 +181,7 @@ def main():
                 rs[0] -= np.min(rs[0])
                 rs[0] /= (np.max(rs[0]) - np.min(rs[0]))
                 image_dict[args.method], _ = gen_cam(img, rs[0], gr_truth_boxes, threshold, boxs)
-                save_image(image_dict, os.path.basename(j), args.output, index='drise_result')
+                save_image(image_dict, os.path.basename(j), args.output_path, index='drise_result')
             elif args.method == 'KDE':
                 all_box = None
                 kde = KDE(sess, image, j, y_p_num_detections, y_p_boxes)
@@ -193,11 +192,11 @@ def main():
                 box, box_predicted = kde.get_box_predicted(img_input)
                 for i in range(300):
                     all_box = draw(image, boxs=[box[i]])
-                save_image(all_box, os.path.basename(j), args.output, index='kde_result')
+                save_image(all_box, os.path.basename(j), args.output_path, index='kde_result')
             elif args.method == 'DensityMap':
                 density_map = DensityMap(sess, image)
                 heatmap = density_map.explain(img_input, y_p_num_detections, y_p_boxes)
-                save_image(heatmap, os.path.basename(j), args.output, index='density_map')
+                save_image(heatmap, os.path.basename(j), args.output_path, index='density_map')
 
 
 if __name__ == '__main__':
