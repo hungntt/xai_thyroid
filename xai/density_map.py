@@ -5,9 +5,10 @@ from utils import get_tensor_mini
 
 
 class DensityMap(object):
-    def __init__(self, sess, image):
+    def __init__(self, sess, image, j):
         self.sess = sess
-        self.image = cv2.cvtColor(cv2.imread(image), cv2.COLOR_BGR2RGB).reshape((1, image.shape[0], image.shape[1], 3))
+        img_color = cv2.cvtColor(cv2.imread(j), cv2.COLOR_BGR2RGB)
+        self.image = img_color.reshape((1, img_color.shape[0], img_color.shape[1], 3))
 
     def explain(self, img_input, y_p_num_detections, y_p_boxes):
         b = [n.name for n in self.sess.graph.as_graph_def().node if 'SecondStageBoxPredictor' in n.name]

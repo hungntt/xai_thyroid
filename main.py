@@ -1,12 +1,14 @@
-import argparse
 import glob
 import os
 import warnings
+from datetime import datetime
+
 import cv2
 import numpy as np
 import tensorflow.compat.v1 as tf
+from skimage import io, img_as_ubyte
 from tqdm import tqdm
-from datetime import datetime
+
 from utils import DeepExplain, get_config, get_model, get_info, save_image, gen_cam, GradientMethod, draw, get_parser
 from xai.adasise import AdaSISE
 from xai.density_map import DensityMap
@@ -15,7 +17,6 @@ from xai.gradcam import GradCAM, GradCAMPlusPlus
 from xai.kde import KDE
 from xai.lime_method import LIME
 from xai.rise import RISE
-from skimage import io, img_as_ubyte
 
 warnings.filterwarnings('ignore')
 start = datetime.now()
@@ -31,7 +32,7 @@ def main(args):
             config_models[0]['model_path'])
     threshold = config_xAI['Model']['threshold']
 
-    # -------------------------Saliency, Grad*Input, eLRP, IntGrad, DeepLIFT-------------------------
+    # -------------------------eLRP-------------------------
     if args.method in ['eLRP']:
         img_rs = sess.graph.get_tensor_by_name(config_xAI['Gradient']['target'] + ':0')
         output_tensor = sess.graph.get_tensor_by_name(config_xAI['Gradient']['output'] + ':0')
@@ -47,12 +48,15 @@ def main(args):
             grads = tf.gradients(np.sum(output_tensor[0, :, 1:2]), last_conv_tensor)[0]
         else:
             NMS = sess.graph.get_tensor_by_name(config_xAI['CAM'][args.stage]['NMS'] + ':0')
-
+    elif args.method in ['KDE', 'DensityMap']:
+        # These two methods do not need num_sample
+        pass
     else:
         num_sample = config_xAI[args.method]['num_sample']
 
     # Run xAI for each image
     for j in tqdm(sorted(glob.glob(f'{args.image_path}/*.jpg'))):
+        # Load image from input folder and extract ground-truth labels from xml file
         image = cv2.imread(j)
         img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = img.reshape(1, img.shape[0], img.shape[1], 3)
@@ -62,6 +66,7 @@ def main(args):
         # First stage of model: Extract 300 boxes
         if args.stage == 'first_stage':
             if args.method in ['eLRP']:
+                # Run epsilon-LRP explainer
                 image_rs = sess.run(img_rs, feed_dict={img_input: image})
                 baseline = np.zeros_like(image_rs)
                 gradient = GradientMethod(sess, img_rs, output_tensor, explainer, baseline)
@@ -78,20 +83,29 @@ def main(args):
                     y1, y2 = int(y_p_boxes[0][i][0] * h_img), int(y_p_boxes[0][i][2] * h_img)
                     boxs.append([x1, y1, x2, y2])
                 if args.method == 'GradCAM':
+                    # Run GradCAM for each class
                     gradcam = GradCAM(sess, last_conv_tensor, output_tensor)
                     mask = gradcam(image, grads, img_input, args.stage, y_p_boxes)
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img, mask, gr_truth_boxes, threshold, boxs)
-                    save_image(image_dict, os.path.basename(j), args.output_path, index='gradcam_first_stage_full_image')
+                    save_image(image_dict, os.path.basename(j), args.output_path,
+                               index='gradcam_first_stage_full_image')
                 else:
+                    # Run GradCAM++ for each class
                     grad_cam_plus_plus = GradCAMPlusPlus(sess, last_conv_tensor, output_tensor)
                     mask_plus_plus = grad_cam_plus_plus(image, grads, img_input, args.stage, y_p_boxes)  # cam mask
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img, mask_plus_plus, gr_truth_boxes, threshold, boxs)
                     save_image(image_dict, os.path.basename(j), args.output_path,
                                index='gradcam_plus_first_stage_full_image')
+            else:
+                print('Method not supported for first stage')
+                pass
+
+        # Main part
         # Second stage of model: Detect final boxes containing the nodule(s)
         else:
+            # Extract boxes from session
             y_p_boxes, y_p_scores, y_p_num_detections = sess.run([detection_boxes,
                                                                   detection_scores,
                                                                   num_detections],
@@ -157,12 +171,15 @@ def main(args):
                                                                         y_p_boxes=y_p_boxes)  # cam mask
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img[y1:y2, x1:x2], mask_plus_plus, gr_truth_boxes, threshold)
-                    save_image(image_dict, os.path.basename(j), args.output_path, index=f'gradcam_plus_2th_stage_box{index}')
+                    save_image(image_dict, os.path.basename(j), args.output_path,
+                               index=f'gradcam_plus_2th_stage_box{index}')
             elif args.method == 'AdaSISE':
+                # Run AdaSISE and save results
                 adasise = AdaSISE(image=image, sess=sess)
                 image_cam = adasise.explain(image, img_input)
                 io.imsave(os.path.join("/content/", f'{name_img}.jpg'), img_as_ubyte(image_cam))
             elif args.method == 'DRISE':
+                # Run DRISE and save results
                 drise = DRISE(image=image, sess=sess, grid_size=8, prob=0.4, num_samples=100)
                 rs = drise.explain(image,
                                    img_input,
@@ -183,23 +200,24 @@ def main(args):
                 image_dict[args.method], _ = gen_cam(img, rs[0], gr_truth_boxes, threshold, boxs)
                 save_image(image_dict, os.path.basename(j), args.output_path, index='drise_result')
             elif args.method == 'KDE':
+                # Run KDE and save results
                 all_box = None
                 kde = KDE(sess, image, j, y_p_num_detections, y_p_boxes)
-                kde.show_kde_map()
                 kernel, f = kde.get_kde_map()
-                kde_score = 1 / kde.get_kde_score(kernel)
+                kde_score = 1 / kde.get_kde_score(kernel)  # Compute KDE score
                 print('kde_score:', kde_score)
                 box, box_predicted = kde.get_box_predicted(img_input)
                 for i in range(300):
                     all_box = draw(image, boxs=[box[i]])
                 save_image(all_box, os.path.basename(j), args.output_path, index='kde_result')
             elif args.method == 'DensityMap':
-                density_map = DensityMap(sess, image)
+                # Run DensityMap and save results
+                density_map = DensityMap(sess, image, j)
                 heatmap = density_map.explain(img_input, y_p_num_detections, y_p_boxes)
-                save_image(heatmap, os.path.basename(j), args.output_path, index='density_map')
+                cv2.imwrite(os.path.join("/results/", f'{name_img}.jpg'), img_as_ubyte(heatmap))
 
 
 if __name__ == '__main__':
-    arguments = get_parser().parse_args()
+    arguments = get_parser()
     main(arguments)
     print(f'Total training time: {datetime.now() - start}')

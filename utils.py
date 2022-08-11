@@ -935,7 +935,7 @@ def get_parser():
     parser = argparse.ArgumentParser(description='xAI for thyroid cancer detection')
     parser.add_argument(
             '--config-path',
-            default='model/config/model_config.json',
+            default='xAI_config.json',
             metavar='FILE',
             help='path to config file',
     )
@@ -947,4 +947,4 @@ def get_parser():
                         help='Choose a stage to visualize: first_stage or second_stage')
     parser.add_argument('--threshold', default=0.6, type=float, help='Threshold of output values to visualize')
     parser.add_argument('--output-path', help='A file or directory to save output visualizations.')
-    return parser
+    return parser.parse_args()
