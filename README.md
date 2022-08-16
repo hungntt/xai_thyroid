@@ -1,12 +1,16 @@
 # XAI Thyroid #
 
-## This repository contains the source code for XAI Thyroid -- an XAI object detection problem ##
+## This repository contains the source code for XAI Thyroid - an XAI object detection problem ##
 
 1. **Install environment**
 
 ```
 pip install -r requirements.txt
 ```
+
+- Download the model at: https://drive.google.com/file/d/1IOyom78mexC6BPq4gPkfFLg-3vPzBnnO/view?usp=sharing
+
+Move the model to ``model/src/`` folder.
 
 2. **Instruct the parameters to be run with each algorithm**
 
