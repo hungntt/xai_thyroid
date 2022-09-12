@@ -1,6 +1,6 @@
 # XAI Thyroid #
 
-## This repository contains the source code for XAI Thyroid - an XAI object detection problem ##
+## Source code for XAI Thyroid - an XAI object detection problem ##
 
 1. **Install environment**
 
@@ -61,3 +61,4 @@ python main.py --config-path xAI_config.json --method GradCAM++ --image-path dat
 
 **Note:** To change input, change the path to new data and path to xml file in xAI_config.json
 
+![img.png](img.png)
