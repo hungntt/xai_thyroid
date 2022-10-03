@@ -61,7 +61,10 @@ def main(args):
         img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = img.reshape(1, img.shape[0], img.shape[1], 3)
         name_img = os.path.basename(j).split('.')[0]
-        gr_truth_boxes = get_info(config_xAI['Model']['folder_xml'] + f'{name_img}.xml')
+        try:
+            gr_truth_boxes = get_info(config_xAI['Model']['folder_xml'] + f'{name_img}.xml')
+        except FileNotFoundError:
+            gr_truth_boxes = None
 
         # First stage of model: Extract 300 boxes
         if args.stage == 'first_stage':

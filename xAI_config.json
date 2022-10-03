@@ -11,6 +11,12 @@
     "prob": 0.5,
     "index": 0
   },
+  "DRISE": {
+    "num_sample": 500,
+    "grid_size": 8,
+    "prob": 0.5,
+    "index": 0
+  },
   "CAM": {
     "first_stage": {
       "output": "concat_1",
