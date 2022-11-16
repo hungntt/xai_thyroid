@@ -1,3 +1,4 @@
+![img_2.png](img_2.png)
 # Towards XAI in Thyroid Tumor Diagnosis #
 
 ## Source code for XAI Thyroid - an XAI object detection problem ##
