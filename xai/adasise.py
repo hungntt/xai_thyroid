@@ -1,3 +1,4 @@
+from re import S
 import cv2
 import numpy as np
 import tensorflow as tf
@@ -96,52 +97,25 @@ class AdaSISE(object):
         for k in range(len(o)):
             score_saliency = 0
             for j in (b[k]):
-                md1 = cv2.resize(o[k][0, :, :, j], (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+                md1 = cv2.resize(o[k][0, :, :, j], (img.shape[2], img.shape[1]), interpolation=cv2.INTER_LINEAR)
                 if md1.max() == md1.min():
                     continue
                 md1 = (md1 - np.min(md1)) / (np.max(md1) - np.min(md1))
-                img_md1 = ((img * (md1[:, :, None].astype(np.float32))).astype(np.uint8))
-                img_md1 = img_md1[None, :]
+                img_md1 = ((img * (md1[None,:, :, None].astype(np.float32))).astype(np.uint8))
                 output_md1 = self.sess.run(self.target_layer, feed_dict={img_input: img_md1})
                 x = softmax(output_md1[0, :])
                 score = np.sum(x[:, 1])
                 score_saliency += score * md1
             score_saliency_map.append(score_saliency)
+        heatmap = 0
         for i in range(len(score_saliency_map)):
             if type(score_saliency_map[i]) == int:
                 continue
             score_saliency_map[i] = (score_saliency_map[i] - score_saliency_map[i].min()) / (
                     score_saliency_map[i].max() - score_saliency_map[i].min())
-
-        s0 = np.array(score_saliency_map[0] * 255, dtype=np.uint8)
-        s1 = np.array(score_saliency_map[1] * 255, dtype=np.uint8)
-        s2 = np.array(score_saliency_map[2] * 255, dtype=np.uint8)
-        s3 = np.array(score_saliency_map[3] * 255, dtype=np.uint8)
-        s4 = np.array(score_saliency_map[4] * 255, dtype=np.uint8)
-
-        block2 = cv2.threshold(s1, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU, )[1] / 255
-        block3 = cv2.threshold(s2, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU, )[1] / 255
-        block4 = cv2.threshold(s3, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU, )[1] / 255
-        block5 = cv2.threshold(s4, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU, )[1] / 255
-
-        score_1_2 = score_saliency_map[0] + score_saliency_map[1]
-        block_1_2 = score_1_2 * block2
-        block_1_2 = block_1_2
-        score_1_2_3 = block_1_2 + score_saliency_map[2]
-        block_1_2_3 = score_1_2_3 * block3
-        block_1_2_3 = block_1_2_3
-        score_1_2_3_4 = block_1_2_3 + score_saliency_map[3]
-        block_1_2_3_4 = score_1_2_3_4 * block4
-        block_1_2_3_4 = block_1_2_3_4
-        score_1_2_3_4_5 = block_1_2_3_4 + score_saliency_map[4]
-        block_1_2_3_4_5 = score_1_2_3_4_5 * block5
-        block_1_2_3_4_5 = block_1_2_3_4_5
-        block_1_2_3_4_5 -= block_1_2_3_4_5.min()
-        block_1_2_3_4_5 /= (block_1_2_3_4_5.max() - block_1_2_3_4_5.min())
-
-        cam_resized = cv2.resize(block_1_2_3_4_5, (img.shape[1], img.shape[0]))
-        heatmap = cv2.applyColorMap(np.uint8(255 * cam_resized), cv2.COLORMAP_JET)
-        image_cam = cv2.addWeighted(heatmap, 0.5, img, 0.5, 0)
-        image_cam = image_cam[..., ::-1]
-
-        return image_cam
+            s = np.array(score_saliency_map[i] * 255, dtype=np.uint8)
+            block = cv2.threshold(s, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU, )[1] / 255
+            heatmap += score_saliency_map[i]
+            if i > 0:
+                heatmap  *= block
+        return heatmap

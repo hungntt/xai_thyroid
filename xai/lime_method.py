@@ -6,7 +6,7 @@ from lime import lime_image
 
 
 class LIME(object):
-    def __init__(self, session, image, indices, top_labels=1, num_features=60):
+    def __init__(self, session, img_input, detection_scores, image, indices, top_labels=1, num_features=60):
         """
         Initialize LIME
         :param session: Tensorflow session
@@ -17,6 +17,8 @@ class LIME(object):
         """
         self.image = image
         self.sess = session
+        self.img_input = img_input
+        self.detection_scores = detection_scores
         self.top_labels = top_labels
         self.result = None
         self.num_features = num_features
@@ -32,8 +34,7 @@ class LIME(object):
         segments_slic = slic(image, n_segments=self.num_features, compactness=30, sigma=3)
         return segments_slic
 
-    def _predict_(self, sample, img_input, detection_boxes, detection_scores, num_detections, detection_classes,
-                  flag=False):
+    def _predict_(self, sample, flag=False):
         """
         Predict image
         :param sample: Input image
@@ -41,12 +42,10 @@ class LIME(object):
         :return: Prediction
         """
         img = sample
-        input_dict = {img_input: img}
-        p_boxes, p_scores, p_num_detections, p_classes = self.sess.run(
-                [detection_boxes, detection_scores, num_detections, detection_classes],
-                feed_dict=input_dict)
+        input_dict = {self.img_input: img}
+        p_scores = self.sess.run(self.detection_scores, feed_dict=input_dict)
         if flag:
-            return p_boxes, p_scores, p_num_detections, p_classes
+            return p_scores
         else:
             rs = np.array([])
             n = img.shape[0]

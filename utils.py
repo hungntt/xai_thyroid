@@ -926,7 +926,71 @@ def softmax(x):
     f = np.exp(x) / np.sum(np.exp(x), axis=1, keepdims=True)
     return f
 
+def create_file(path):
+    """
+    Create file/directory if file/directory doesn't exist
+    """
+    if not os.path.exists(path):
+        os.makedirs(path)
 
+def energy_point_game(bbox, saliency_map):
+    """
+    Caculate energy-based pointing game evaluation
+    :param bbox: [N,4], the bounding boxes
+    :param saliency_map: [H, W], final saliency map
+    """
+    h, w = saliency_map.shape
+    empty = np.zeros((h, w))
+    for b in bbox:
+        x1, y1, x2, y2 = b
+        # print(x1, y1, x2, y2, h, w)
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        h, w = saliency_map.shape 
+        empty[y1:y2, x1:x2] = 1
+    mask_bbox = saliency_map * empty   
+    energy_bbox =  mask_bbox.sum()
+    energy_whole = saliency_map.sum() 
+    proportion = energy_bbox / energy_whole 
+    return proportion
+
+def bounding_boxes(bboxs, saliency_map):
+    """
+    Caculate bounding boxes evaluation
+    :param bbox: [N,4], the bounding boxes
+    :param saliency_map: [H, W], final saliency map
+    """
+    height, width = saliency_map.shape
+    HW = height*width
+    area = 0
+    mask = np.zeros((height, width))
+    for bbox in bboxs:
+        xi, yi, xa, ya = bbox
+        area += (xa-xi)*(ya-yi)
+        mask[yi:ya, xi:xa] = 1
+    sal_order = np.flip(np.argsort(saliency_map.reshape(HW, -1), axis=0), axis=0)
+    y= sal_order//saliency_map.shape[1]
+    x = sal_order - y*saliency_map.shape[1]  
+    mask_cam = np.zeros_like(saliency_map)
+    mask_cam[y[0:area, :], x[0:area, :]] = 1
+    ratio = (mask*mask_cam).sum()/(area)
+    return ratio
+def IoU(mask, cam_map):
+    heatmap = cv2.applyColorMap(np.uint8(255 * cam_map), cv2.COLORMAP_JET)           
+    area_mask = np.count_nonzero(mask == 1)
+    gray = cv2.cvtColor(heatmap, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    # Find contours
+    cnts = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+    mask_cam = np.zeros_like(cam_map)
+    for c in cnts:
+        x,y,w,h = cv2.boundingRect(c)
+        mask_cam[y:y+h, x:x+w] = 1
+    area_mask_cam = np.count_nonzero(mask_cam == 1)
+    mask_sum = mask*mask_cam
+    area_sum = np.count_nonzero(mask_sum)
+    iou = area_sum/(area_mask + area_mask_cam - area_sum)
+    return iou
 def get_parser():
     """
     Parse command line arguments
@@ -947,4 +1011,5 @@ def get_parser():
                         help='Choose a stage to visualize: first_stage or second_stage')
     parser.add_argument('--threshold', default=0.6, type=float, help='Threshold of output values to visualize')
     parser.add_argument('--output-path', help='A file or directory to save output visualizations.')
+    parser.add_argument('--output-numpy', help='A file or directory to save saliency map(np.ndarray).')
     return parser.parse_args()
