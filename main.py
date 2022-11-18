@@ -9,7 +9,7 @@ import tensorflow.compat.v1 as tf
 from skimage import io, img_as_ubyte
 from tqdm import tqdm
 
-from utils import DeepExplain, get_config, get_model, get_info, save_image, gen_cam, GradientMethod, draw, get_parser
+from utils import DeepExplain, get_config, get_model, get_info, save_image, gen_cam, GradientMethod, draw, create_file, get_parser
 from xai.adasise import AdaSISE
 from xai.density_map import DensityMap
 from xai.drise import DRISE
@@ -31,7 +31,9 @@ def main(args):
     sess, img_input, detection_boxes, detection_scores, num_detections, detection_classes = get_model(
             config_models[0]['model_path'])
     threshold = config_xAI['Model']['threshold']
-
+    # -------------------Create directory-------------------
+    create_file(args.output_path)
+    create_file(args.output_numpy)
     # -------------------------eLRP-------------------------
     if args.method in ['eLRP']:
         img_rs = sess.graph.get_tensor_by_name(config_xAI['Gradient']['target'] + ':0')
@@ -48,7 +50,7 @@ def main(args):
             grads = tf.gradients(np.sum(output_tensor[0, :, 1:2]), last_conv_tensor)[0]
         else:
             NMS = sess.graph.get_tensor_by_name(config_xAI['CAM'][args.stage]['NMS'] + ':0')
-    elif args.method in ['KDE', 'DensityMap']:
+    elif args.method in ['KDE', 'DensityMap', 'AdaSISE']:
         # These two methods do not need num_sample
         pass
     else:
@@ -74,6 +76,7 @@ def main(args):
                 baseline = np.zeros_like(image_rs)
                 gradient = GradientMethod(sess, img_rs, output_tensor, explainer, baseline)
                 image_dict[args.method] = gradient(image, args.method, img_input)
+                np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), image_dict[args.method])
                 save_image(image_dict, os.path.basename(j), args.output_path, index='full_image')
 
             elif args.method in ['GradCAM', 'GradCAM++']:
@@ -91,6 +94,7 @@ def main(args):
                     mask = gradcam(image, grads, img_input, args.stage, y_p_boxes)
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img, mask, gr_truth_boxes, threshold, boxs)
+                    np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), mask)
                     save_image(image_dict, os.path.basename(j), args.output_path,
                                index='gradcam_first_stage_full_image')
                 else:
@@ -99,8 +103,16 @@ def main(args):
                     mask_plus_plus = grad_cam_plus_plus(image, grads, img_input, args.stage, y_p_boxes)  # cam mask
                     # Save image and heatmap
                     image_dict[args.method], _ = gen_cam(img, mask_plus_plus, gr_truth_boxes, threshold, boxs)
+                    np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), mask_plus_plus)
                     save_image(image_dict, os.path.basename(j), args.output_path,
                                index='gradcam_plus_first_stage_full_image')
+            elif args.method == 'AdaSISE':
+                # Run AdaSISE and save results
+                adasise = AdaSISE(image=image, sess=sess)
+                image_cam = adasise.explain(image, img_input)
+                np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), image_cam)
+                image_dict[args.method], _ = gen_cam(img, image_cam, gr_truth_boxes, threshold)
+                save_image(image_dict, os.path.basename(j), args.output_path, index=f'adasise_full_image')
             else:
                 print('Method not supported for first stage')
                 pass
@@ -130,6 +142,7 @@ def main(args):
                 rise = RISE(image=image, sess=sess, grid_size=grid_size, prob=prob, num_samples=num_sample)
                 rs = rise.explain(image, index, img_input, detection_boxes, detection_scores, num_detections,
                                   detection_classes)[0]
+                np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), rs)
                 image_dict[args.method], _ = gen_cam(img, rs, gr_truth_boxes, threshold, boxs)
                 save_image(image_dict, os.path.basename(j), args.output_path, index=f'rise_box{index}')
 
@@ -137,8 +150,14 @@ def main(args):
                 index = config_xAI['LIME']['index']
                 num_features = config_xAI['LIME']['num_features']
                 feature_view = 1
-                lime = LIME(sess, image=img, indices=index, num_features=num_features)
+                lime = LIME(sess, img_input=img_input, detection_scores=detection_scores, image=img, indices=index, num_features=num_features)
                 image_dict[args.method] = lime.explain(feature_view, num_samples=num_sample)
+                # ------------saliency map for LIME --------------
+                cam_map = np.zeros(image.shape[1:3])
+                for k, v in image_dict[args.method].result.local_exp[0]:
+                    cam_map[image_dict[args.method].segments == k] = v
+                # save results
+                np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), cam_map)
                 save_image(image_dict, os.path.basename(j), args.output_path, index=f'rise_box{index}')
 
             elif args.method in ['GradCAM', 'GradCAM++']:
@@ -176,11 +195,6 @@ def main(args):
                     image_dict[args.method], _ = gen_cam(img[y1:y2, x1:x2], mask_plus_plus, gr_truth_boxes, threshold)
                     save_image(image_dict, os.path.basename(j), args.output_path,
                                index=f'gradcam_plus_2th_stage_box{index}')
-            elif args.method == 'AdaSISE':
-                # Run AdaSISE and save results
-                adasise = AdaSISE(image=image, sess=sess)
-                image_cam = adasise.explain(image, img_input)
-                io.imsave(os.path.join("/content/", f'{name_img}.jpg'), img_as_ubyte(image_cam))
             elif args.method == 'DRISE':
                 # Run DRISE and save results
                 drise = DRISE(image=image, sess=sess, grid_size=8, prob=0.4, num_samples=100)
@@ -200,23 +214,26 @@ def main(args):
                     boxs.append([x1, y1, x2, y2])
                 rs[0] -= np.min(rs[0])
                 rs[0] /= (np.max(rs[0]) - np.min(rs[0]))
+                np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), rs)
                 image_dict[args.method], _ = gen_cam(img, rs[0], gr_truth_boxes, threshold, boxs)
                 save_image(image_dict, os.path.basename(j), args.output_path, index='drise_result')
             elif args.method == 'KDE':
                 # Run KDE and save results
                 all_box = None
                 kde = KDE(sess, image, j, y_p_num_detections, y_p_boxes)
-                kernel, f = kde.get_kde_map()
-                kde_score = 1 / kde.get_kde_score(kernel)  # Compute KDE score
-                print('kde_score:', kde_score)
                 box, box_predicted = kde.get_box_predicted(img_input)
+                kernel, f = kde.get_kde_map(box)
+                np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), f.T)
+                kde_score = 1 / kde.get_kde_score(kernel, box_predicted)  # Compute KDE score
+                print('kde_score:', kde_score)
                 for i in range(300):
                     all_box = draw(image, boxs=[box[i]])
-                save_image(all_box, os.path.basename(j), args.output_path, index='kde_result')
+                kde.show_kde_map(box_predicted, f, save_file=args.output_path)
             elif args.method == 'DensityMap':
                 # Run DensityMap and save results
                 density_map = DensityMap(sess, image, j)
                 heatmap = density_map.explain(img_input, y_p_num_detections, y_p_boxes)
+                np.save(os.path.join(args.output_numpy, f"{args.method}_{name_img}.npy"), heatmap)
                 cv2.imwrite(os.path.join("/results/", f'{name_img}.jpg'), img_as_ubyte(heatmap))
 
 
