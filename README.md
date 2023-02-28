@@ -1,6 +1,6 @@
 ![img_2.png](img_2.png)
 # Towards XAI in Thyroid Tumor Diagnosis #
-
+Our paper is accepted and presented as a long presentation at Health Intelligence Workshop (W3PHIAI-23) at AAAI-23.
 ## Source code for XAI Thyroid - an XAI object detection problem ##
 
 1. **Install environment**
