@@ -71,3 +71,14 @@ python main.py --config-path xAI_config.json --method GradCAM++ --image-path dat
 • Localization (Which features of an image does the model consider to detect a specific box containing a nodule at the model’s second stage?): D-RISE.
 ## Results 
 ![img.png](img.png)
+
+## Citation
+If you find this repository helpful for your research. Please cite our paper as a small support for us too :)
+```
+@article{nguyen2023towards,
+  title={Towards Trust of Explainable AI in Thyroid Nodule Diagnosis},
+  author={Nguyen, Truong Thanh Hung and Truong, Van Binh and Nguyen, Vo Thanh Khang and Cao, Quoc Hung and Nguyen, Quoc Khanh},
+  journal={arXiv preprint arXiv:2303.04731},
+  year={2023}
+}
+```
