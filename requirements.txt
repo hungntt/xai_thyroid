@@ -13,7 +13,7 @@ deepexplain @ git+https://github.com/marcoancona/DeepExplain.git@6ac43e729dc8db6
 deeplift==0.6.9.0
 Flask==1.0.2
 Flask-Assets==0.12
-Flask-Cors==3.0.7
+Flask-Cors==4.0.0
 future==0.17.1
 keras==2.1.6
 gast==0.2.2
