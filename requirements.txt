@@ -18,7 +18,7 @@ future==0.17.1
 gast==0.2.2
 grpcio==1.19.0
 h5py==2.10.0
-idna==2.8
+idna==3.7
 innvestigate @ git+https://github.com/albermax/innvestigate@e76ec2d85a6d59d56b6bbb6dbbf1efee6cea6166
 itsdangerous==1.1.0
 Jinja2==2.10
